@@ -11,6 +11,7 @@ import urllib
 import json
 import glob
 import struct
+import subprocess
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 from io import BytesIO
@@ -124,6 +125,19 @@ class PromptServer():
         async def get_root(request):
             return web.FileResponse(os.path.join(self.web_root, "index.html"))
 
+        @routes.post('/run-script')
+        async def run_script_handler(request):
+            data = await request.json()
+            script_path = data.get('script_path', None)
+            if script_path is None:
+                return web.Response(status=400, text="Bad Request: script_path is required")
+
+            try:
+                completed_process = subprocess.run([script_path], check=True, text=True, capture_output=True)
+                return web.json_response({'status': 'success', 'output': completed_process.stdout})
+            except subprocess.CalledProcessError as e:
+                return web.Response(status=500, text=f"Script failed: {e.stderr}")
+                
         @routes.get("/embeddings")
         def get_embeddings(self):
             embeddings = folder_paths.get_filename_list("embeddings")
