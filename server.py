@@ -120,10 +120,12 @@ class PromptServer():
                         print(f"Received message: {msg.data}")
                         # Deserialize the JSON object
                         msg_data = json.loads(msg.data)
+
                         # Extract and use the message string
                         message_str = msg_data.get("data", {}).get("payload", "")
-                        await self.send("event", {"payload": {"message": message_str}})  
-
+                        # broadcast a new message to the website as an event with the string in the json data
+                        await self.send("event", message_str)
+                        
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         print(f'ws connection closed with exception {ws.exception()}')
             finally:
