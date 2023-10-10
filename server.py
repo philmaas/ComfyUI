@@ -49,6 +49,7 @@ async def cache_control(request: web.Request, handler):
         response.headers.setdefault('Cache-Control', 'no-cache')
     return response
 
+
 def create_cors_middleware(allowed_origin: str):
     @web.middleware
     async def cors_middleware(request: web.Request, handler):
@@ -115,8 +116,16 @@ class PromptServer():
                     await self.send("executing", { "node": self.last_node_id }, sid)
                     
                 async for msg in ws:
-                    if msg.type == aiohttp.WSMsgType.ERROR:
-                        print('ws connection closed with exception %s' % ws.exception())
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        print(f"Received message: {msg.data}")
+                        # Deserialize the JSON object
+                        msg_data = json.loads(msg.data)
+                        # Extract and use the message string
+                        message_str = msg_data.get("data", {}).get("payload", "")
+                        await self.send("event", {"payload": {"message": message_str}})  
+
+                    elif msg.type == aiohttp.WSMsgType.ERROR:
+                        print(f'ws connection closed with exception {ws.exception()}')
             finally:
                 self.sockets.pop(sid, None)
             return ws
@@ -620,12 +629,27 @@ class PromptServer():
             msg = await self.messages.get()
             await self.send(*msg)
 
+    async def heartbeat(self):
+        while True:
+            await asyncio.sleep(1)  # Sending heartbeat every 10 seconds
+            for sid, ws in self.sockets.items():
+                try:
+                    await ws.send_json({"type": "heartbeat", "payload": {"message": "ping"}})
+                except:
+                    # Handle disconnection, e.g., remove socket from self.sockets
+                    print(f"Client {sid} disconnected.")
+                    self.sockets.pop(sid, None)
+                     
     async def start(self, address, port, verbose=True, call_on_start=None):
         runner = web.AppRunner(self.app, access_log=None)
         await runner.setup()
         site = web.TCPSite(runner, address, port)
-        await site.start()
-
+        # Run heartbeat and site.start concurrently
+        await asyncio.gather(
+            site.start(),
+            self.heartbeat(),
+            # any other async functions you want to run concurrently can be added here
+        )
         if address == '':
             address = '0.0.0.0'
         if verbose:
@@ -633,6 +657,8 @@ class PromptServer():
             print("To see the GUI go to: http://{}:{}".format(address, port))
         if call_on_start is not None:
             call_on_start(address, port)
+
+
 
     def add_on_prompt_handler(self, handler):
         self.on_prompt_handlers.append(handler)
