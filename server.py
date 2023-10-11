@@ -12,6 +12,7 @@ import json
 import glob
 import struct
 import subprocess
+import shlex
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 from io import BytesIO
@@ -140,11 +141,18 @@ class PromptServer():
         async def run_script_handler(request):
             data = await request.json()
             script_path = data.get('script_path', None)
+            episode_id = data.get('episode_id', None)
             if script_path is None:
                 return web.Response(status=400, text="Bad Request: script_path is required")
 
             try:
-                completed_process = subprocess.run([script_path], check=True, text=True, capture_output=True)
+                bash_script_path = script_path
+                # Ensure the bash script is executable
+                subprocess.run(["chmod", "755", bash_script_path], check=True)
+                episode_id = episode_id
+                command_line = f"{bash_script_path} {episode_id}"
+                completed_process = subprocess.run(shlex.split(command_line))
+                # completed_process = subprocess.run([script_path], check=True, text=True, capture_output=True)
                 return web.json_response({'status': 'success', 'output': completed_process.stdout})
             except subprocess.CalledProcessError as e:
                 return web.Response(status=500, text=f"Script failed: {e.stderr}")
