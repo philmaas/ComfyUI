@@ -146,16 +146,26 @@ class PromptServer():
                 return web.Response(status=400, text="Bad Request: script_path is required")
 
             try:
-                bash_script_path = script_path
                 # Ensure the bash script is executable
-                subprocess.run(["chmod", "755", bash_script_path], check=True)
-                episode_id = episode_id
-                command_line = f"{bash_script_path} {episode_id}"
-                completed_process = subprocess.run(shlex.split(command_line))
-                # completed_process = subprocess.run([script_path], check=True, text=True, capture_output=True)
-                return web.json_response({'status': 'success', 'output': completed_process.stdout})
+                subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
+                await subprocess_run.wait()
+
+                # Execute bash script asynchronously
+                command_line = f"{script_path} {episode_id}"
+                process = await asyncio.create_subprocess_shell(
+                    command_line, 
+                    stdout=asyncio.subprocess.PIPE, 
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+
+                # Check if the subprocess has exited with a non-zero exit code.
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, cmd=command_line, output=stdout, stderr=stderr)
+                
+                return web.json_response({'status': 'success', 'output': stdout.decode('utf-8')})
             except subprocess.CalledProcessError as e:
-                return web.Response(status=500, text=f"Script failed: {e.stderr}")
+                return web.Response(status=500, text=f"Script failed: {e.stderr.decode('utf-8')}")
                 
         @routes.get("/embeddings")
         def get_embeddings(self):
@@ -641,7 +651,7 @@ class PromptServer():
 
     async def heartbeat(self):
         while True:
-            await asyncio.sleep(1)  # Sending heartbeat every 10 seconds
+            await asyncio.sleep(3)  # Sending heartbeat every 10 seconds
             for sid, ws in self.sockets.items():
                 try:
                     await ws.send_json({"type": "heartbeat", "payload": {"message": "ping"}})
