@@ -17,4 +17,3 @@ venv/
 !/web/extensions/core/
 /tests-ui/data/object_info.json
 mainenv/
-/user/
