@@ -77,10 +77,11 @@ class Server:
         return ws
 
 
-        # SSL Context Setup
-ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-ssl_context.load_cert_chain(certfile='/etc/ssl/private/certificate.crt', keyfile='/etc/ssl/private/private.key')
-        # Note: Ensure the paths to the cert and key files are correct and are generated before starting the server.
+# SSL Context Setup
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ssl_context.load_cert_chain('/etc/letsencrypt/live/showrunner-alpha.com/fullchain.pem', 
+                           '/etc/letsencrypt/live/showrunner-alpha.com/privkey.pem')
+# Note: Ensure the paths to the cert and key files are correct and are generated before starting the server.
 # Initialize and run the server
 server = Server()
 web.run_app(server.app, port=7860, ssl_context=ssl_context)
