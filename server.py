@@ -9,7 +9,35 @@ class Server:
         self.app = web.Application()
         self.app.add_routes([web.get('/ws', self.websocket_handler)])
         self.sockets = set()
-    
+
+    async def index(self, request):
+        """ Serve the main HTML page """
+        content = """
+        <html>
+            <head>
+                <title>WebSocket Test Page</title>
+            </head>
+            <body>
+                <h1>Unity Rendering Service</h1>
+                <script>
+                    const ws = new WebSocket('wss://showrunner-alpha.com/ws');
+                    ws.onmessage = event => {
+                        console.log(event.data);
+                    }
+                    ws.onopen = () => {
+                        ws.send(JSON.stringify({
+                            action: "send_message",
+                            data: {
+                                payload: "Hello from the client!"
+                            }
+                        }));
+                    }
+                </script>
+            </body>
+        </html>
+        """
+        return web.Response(content_type='text/html', text=content)
+
     async def send(self, event, data, ws=None):
         message = {"type": event, "data": data}
         if ws:
@@ -75,6 +103,16 @@ class Server:
         
         self.sockets.remove(ws)
         return ws
+
+    def __init__(self):
+        self.app = web.Application()
+        self.app.add_routes([
+            web.get('/', self.index),
+            web.get('/ws', self.websocket_handler)
+        ])
+        self.sockets = set()
+
+
 
 
 # SSL Context Setup
