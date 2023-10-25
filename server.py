@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 import traceback
+import ssl
 
 import nodes
 import folder_paths
@@ -121,14 +122,19 @@ class PromptServer():
                         print(f"Received message: {msg.data}")
                         # Deserialize the JSON object
                         msg_data = json.loads(msg.data)
-
-                        # Extract and use the message string
-                        message_str = msg_data.get("data", {}).get("payload", "")
-                        # broadcast a new message to the website as an event with the string in the json data
-                        await self.send("event", message_str)
                         
-                    elif msg.type == aiohttp.WSMsgType.ERROR:
-                        print(f'ws connection closed with exception {ws.exception()}')
+                        action = msg_data.get("action")
+                        
+                        # Check for call_function action and execute scripts if required
+                        if action == "call_function":
+                            function_name = msg_data.get("function_name")
+                            args = msg_data.get("args", {})
+
+                            if function_name == "run_script":
+                                await self.run_script(args.get('script_path'), args.get('episode_id'))
+
+                    if msg.type == aiohttp.WSMsgType.ERROR:
+                        print('ws connection closed with exception %s' % ws.exception())
             finally:
                 self.sockets.pop(sid, None)
             return ws
@@ -137,36 +143,6 @@ class PromptServer():
         async def get_root(request):
             return web.FileResponse(os.path.join(self.web_root, "index.html"))
 
-        @routes.post('/run-script')
-        async def run_script_handler(request):
-            data = await request.json()
-            script_path = data.get('script_path', None)
-            episode_id = data.get('episode_id', None)
-            if script_path is None:
-                return web.Response(status=400, text="Bad Request: script_path is required")
-
-            try:
-                # Ensure the bash script is executable
-                subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
-                await subprocess_run.wait()
-
-                # Execute bash script asynchronously
-                command_line = f"{script_path} {episode_id}"
-                process = await asyncio.create_subprocess_shell(
-                    command_line, 
-                    stdout=asyncio.subprocess.PIPE, 
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await process.communicate()
-
-                # Check if the subprocess has exited with a non-zero exit code.
-                if process.returncode != 0:
-                    raise subprocess.CalledProcessError(process.returncode, cmd=command_line, output=stdout, stderr=stderr)
-                
-                return web.json_response({'status': 'success', 'output': stdout.decode('utf-8')})
-            except subprocess.CalledProcessError as e:
-                return web.Response(status=500, text=f"Script failed: {e.stderr.decode('utf-8')}")
-                
         @routes.get("/embeddings")
         def get_embeddings(self):
             embeddings = folder_paths.get_filename_list("embeddings")
@@ -585,6 +561,22 @@ class PromptServer():
             await self.send_bytes(event, data, sid)
         else:
             await self.send_json(event, data, sid)
+    async def run_script(self, script_path, episode_id):
+        # Ensure the bash script is executable
+        # subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
+        # await subprocess_run.wait()
+
+        # Print the episode_id
+        print(f"Episode ID: {episode_id}")
+        
+        # Execute bash script asynchronously
+        command_line = f"{script_path} {episode_id}"
+        process = await asyncio.create_subprocess_shell(
+            command_line, 
+            stdout=asyncio.subprocess.PIPE, 
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
 
     def encode_bytes(self, event, data):
         if not isinstance(event, int):
@@ -649,27 +641,16 @@ class PromptServer():
             msg = await self.messages.get()
             await self.send(*msg)
 
-    async def heartbeat(self):
-        while True:
-            await asyncio.sleep(3)  # Sending heartbeat every 10 seconds
-            for sid, ws in self.sockets.items():
-                try:
-                    await ws.send_json({"type": "heartbeat", "payload": {"message": "ping"}})
-                except:
-                    # Handle disconnection, e.g., remove socket from self.sockets
-                    print(f"Client {sid} disconnected.")
-                    self.sockets.pop(sid, None)
-                     
     async def start(self, address, port, verbose=True, call_on_start=None):
+        # SSL Context Setup
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain('/etc/letsencrypt/live/showrunner-alpha.com/fullchain.pem', 
+                           '/etc/letsencrypt/live/showrunner-alpha.com/privkey.pem')
         runner = web.AppRunner(self.app, access_log=None)
         await runner.setup()
-        site = web.TCPSite(runner, address, port)
-        # Run heartbeat and site.start concurrently
-        await asyncio.gather(
-            site.start(),
-            self.heartbeat(),
-            # any other async functions you want to run concurrently can be added here
-        )
+        site = web.TCPSite(runner, address, port, ssl_context=ssl_context)
+        await site.start()
+
         if address == '':
             address = '0.0.0.0'
         if verbose:
