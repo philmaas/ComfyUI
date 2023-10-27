@@ -128,6 +128,9 @@ class PromptServer():
 
                             if function_name == "run_script":
                                 await self.run_script(args.get('script_path'), args.get('episode_id'))
+                        else:
+                            message_str = msg_data.get("data", {}).get("payload", "")
+                            await self.send("event", message_str)                         
                     if msg.type == aiohttp.WSMsgType.ERROR:
                         print('ws connection closed with exception %s' % ws.exception())
             finally:
