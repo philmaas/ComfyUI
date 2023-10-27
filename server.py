@@ -130,10 +130,7 @@ class PromptServer():
                             args = msg_data.get("args", {})
 
                             if function_name == "run_script":
-                                await self.run_script(args.get('script_path'), args.get('episode_id'), args.get('instance_domain'), args.get('userId'))
-                        else:
-                            message_str = msg_data.get("data", {}).get("payload", "")
-                            await self.send("event", message_str)                         
+                                await self.run_script(args.get('script_path'), args.get('episode_id'))
                     if msg.type == aiohttp.WSMsgType.ERROR:
                         print('ws connection closed with exception %s' % ws.exception())
             finally:
@@ -578,16 +575,16 @@ class PromptServer():
         else:
             await self.send_json(event, data, sid)
 
-    async def run_script(self, script_path, episode_id, instance_domain, sid=None):
+    async def run_script(self, script_path, episode_id):
         # Ensure the bash script is executable
         # subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
         # await subprocess_run.wait()
 
         # Print the episode_id
-        print(f"Episode ID: {episode_id} Instance Domain: {instance_domain} User ID: {sid}")
+        print(f"Episode ID: {episode_id}")
         
         # Execute bash script asynchronously
-        command_line = f"{script_path} {episode_id} {instance_domain} {sid}"
+        command_line = f"{script_path} {episode_id}"
         process = await asyncio.create_subprocess_shell(
             command_line, 
             stdout=asyncio.subprocess.PIPE, 
