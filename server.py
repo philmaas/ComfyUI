@@ -663,8 +663,8 @@ class PromptServer():
     async def start(self, address, port, verbose=True, call_on_start=None):
         # SSL Context Setup
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain('/etc/letsencrypt/live/showrunner_cert/fullchain.pem', 
-                                '/etc/letsencrypt/live/showrunner_cert/privkey.pem')
+        ssl_context.load_cert_chain('/etc/letsencrypt/live/showrunner-alpha.com/fullchain.pem', 
+                                '/etc/letsencrypt/live/showrunner-alpha.com/privkey.pem')
 
         runner = web.AppRunner(self.app, access_log=None)
         await runner.setup()
