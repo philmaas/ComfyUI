@@ -115,6 +115,20 @@ class PromptServer():
                     await self.send("executing", { "node": self.last_node_id }, sid)
                     
                 async for msg in ws:
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        print(f"Received message: {msg.data}")
+                        # Deserialize the JSON object
+                        msg_data = json.loads(msg.data)
+                        
+                        action = msg_data.get("action")
+                        
+                        # Check for call_function action and execute scripts if required
+                        if action == "call_function":
+                            function_name = msg_data.get("function_name")
+                            args = msg_data.get("args", {})
+
+                            if function_name == "run_script":
+                                await self.run_script(args.get('script_path'), args.get('episode_id'))
                     if msg.type == aiohttp.WSMsgType.ERROR:
                         print('ws connection closed with exception %s' % ws.exception())
             finally:
@@ -543,6 +557,23 @@ class PromptServer():
             await self.send_bytes(event, data, sid)
         else:
             await self.send_json(event, data, sid)
+
+    async def run_script(self, script_path, episode_id):
+        # Ensure the bash script is executable
+        # subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
+        # await subprocess_run.wait()
+
+        # Print the episode_id
+        print(f"Episode ID: {episode_id}")
+        
+        # Execute bash script asynchronously
+        command_line = f"{script_path} {episode_id}"
+        process = await asyncio.create_subprocess_shell(
+            command_line, 
+            stdout=asyncio.subprocess.PIPE, 
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
 
     def encode_bytes(self, event, data):
         if not isinstance(event, int):
