@@ -127,7 +127,7 @@ class PromptServer():
                             args = msg_data.get("args", {})
 
                             if function_name == "run_script":
-                                await self.run_script(args.get('script_path'), args.get('episode_id'))
+                                await self.run_script(args.get('script_path'), args.get('episode_id'), args.get('instance_domain'), args.get('userId'))
                         else:
                             message_str = msg_data.get("data", {}).get("payload", "")
                             await self.send("event", message_str)                         
