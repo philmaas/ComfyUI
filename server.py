@@ -560,16 +560,16 @@ class PromptServer():
         else:
             await self.send_json(event, data, sid)
 
-    async def run_script(self, script_path, episode_id):
+    async def run_script(self, script_path, episode_id, instance_domain, sid=None):
         # Ensure the bash script is executable
         # subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
         # await subprocess_run.wait()
 
         # Print the episode_id
-        print(f"Episode ID: {episode_id}")
+        print(f"Episode ID: {episode_id} Instance Domain: {instance_domain} User ID: {sid}")
         
         # Execute bash script asynchronously
-        command_line = f"{script_path} {episode_id}"
+        command_line = f"{script_path} {episode_id} {instance_domain} {sid}"
         process = await asyncio.create_subprocess_shell(
             command_line, 
             stdout=asyncio.subprocess.PIPE, 
