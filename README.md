@@ -10,7 +10,6 @@ Before you begin, ensure you have met the following requirements:
 
 - You have a Windows/Linux/Mac machine.
 - You have a text editor (e.g., Visual Studio Code).
-- Install extension for VS Code: `esbenp.prettier-vscode`
 - Install Python 3.10 or later
 
 ## Installing Comfyui
