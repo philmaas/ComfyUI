@@ -1,3 +1,36 @@
+# Showrunner Stable Diffusion Pipeline
+
+## Features
+
+- TODO: add features
+
+## Prerequisites
+
+Before you begin, ensure you have met the following requirements:
+
+- You have a Windows/Linux/Mac machine.
+- You have a text editor (e.g., Visual Studio Code).
+- Install extension for VS Code: `esbenp.prettier-vscode`
+- Install Python 3.10 or later
+
+## Installing Comfyui
+
+- Create a venv for Comfyui: `python3.10 -m venv mainenv`
+- Activate the venv: `source mainenv/bin/activate` or `mainenv\Scripts\activate.bat` (Windows CMD) `.\mainenv\Scripts\Activate.ps1` (Windows Powershell)
+- Install Comfyui: `python3 -m pip install -r requirements.txt` (not tested)
+
+- TODO: see reference "SETUP" readme below
+
+## Launch
+
+- with activate mainenv run `python main.py --listen --port 7860`
+
+## Troubleshooting
+
+- TODO: cuda pytorch etc
+
+## Reference Readme for ComfyUI
+
 ComfyUI
 =======
 The most powerful and modular stable diffusion GUI and backend.
