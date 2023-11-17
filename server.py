@@ -115,15 +115,15 @@ class PromptServer():
                 # On reconnect if we are the currently executing client send the current node
                 if self.client_id == sid and self.last_node_id is not None:
                     await self.send("executing", { "node": self.last_node_id }, sid)
-                    
+
                 async for msg in ws:
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         print(f"Received message: {msg.data}")
                         # Deserialize the JSON object
                         msg_data = json.loads(msg.data)
-                        
+
                         action = msg_data.get("action")
-                        
+
                         # Check for call_function action and execute scripts if required
                         if action == "call_function":
                             function_name = msg_data.get("function_name")
@@ -131,9 +131,11 @@ class PromptServer():
 
                             if function_name == "run_script":
                                 await self.run_script(args.get('script_path'), args.get('episode_id'), args.get('instance_domain'), args.get('userId'))
+                            elif function_name == "generate_video":
+                                await self.generate_video(args)
                         else:
                             message_str = msg_data.get("data", {}).get("payload", "")
-                            await self.send("event", message_str)                         
+                            await self.send("event", message_str)
                     if msg.type == aiohttp.WSMsgType.ERROR:
                         print('ws connection closed with exception %s' % ws.exception())
             finally:
@@ -153,9 +155,9 @@ class PromptServer():
         async def get_extensions(request):
             files = glob.glob(os.path.join(
                 glob.escape(self.web_root), 'extensions/**/*.js'), recursive=True)
-            
+
             extensions = list(map(lambda f: "/" + os.path.relpath(f, self.web_root).replace("\\", "/"), files))
-            
+
             for name, dir in nodes.EXTENSION_WEB_DIRS.items():
                 files = glob.glob(os.path.join(glob.escape(dir), '**/*.js'), recursive=True)
                 extensions.extend(list(map(lambda f: "/extensions/" + urllib.parse.quote(
@@ -549,7 +551,7 @@ class PromptServer():
                     self.prompt_queue.delete_history_item(id_to_delete)
 
             return web.Response(status=200)
-        
+
     def add_routes(self):
         self.user_manager.add_routes(self.routes)
         self.app.add_routes(self.routes)
@@ -585,15 +587,35 @@ class PromptServer():
 
         # Print the episode_id
         print(f"Episode ID: {episode_id} Instance Domain: {instance_domain} User ID: {sid}")
-        
+
         # Execute bash script asynchronously
         command_line = f"{script_path} {episode_id} {instance_domain} {sid}"
         process = await asyncio.create_subprocess_shell(
-            command_line, 
-            stdout=asyncio.subprocess.PIPE, 
+            command_line,
+            stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
+
+    async def generate_video(self, args):
+        # Ensure the bash script is executable
+        # subprocess_run = await asyncio.create_subprocess_exec("chmod", "755", script_path)
+        # await subprocess_run.wait()
+
+        script_path = args.get('scriptPath')
+
+        # Print the args
+        print(f"generate_video: \"{args}\"")
+
+        # Execute bash script asynchronously
+        command_line = f"{script_path} \"{args}\""
+        process = await asyncio.create_subprocess_shell(
+            command_line,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        print(f"generate_video complete")
 
     def encode_bytes(self, event, data):
         if not isinstance(event, int):
