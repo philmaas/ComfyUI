@@ -642,10 +642,18 @@ class PromptServer():
             await self.send(*msg)
 
     async def start(self, address, port, verbose=True, call_on_start=None):
-        # SSL Context Setup
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain('/etc/letsencrypt/live/showrunner_cert/fullchain.pem', 
-                                '/etc/letsencrypt/live/showrunner_cert/privkey.pem')
+        ssl_cert_path = '/etc/letsencrypt/live/showrunner_cert/fullchain.pem'
+        ssl_key_path = '/etc/letsencrypt/live/showrunner_cert/privkey.pem'
+
+        if os.path.exists(ssl_cert_path) and os.path.exists(ssl_key_path):
+            # SSL Context Setup
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(ssl_cert_path, ssl_key_path)
+            use_ssl = True
+        else:
+            print("SSL keys not found. Starting server without SSL.")
+            ssl_context = None
+            use_ssl = False
 
         runner = web.AppRunner(self.app, access_log=None)
         await runner.setup()
@@ -654,9 +662,10 @@ class PromptServer():
 
         if address == '':
             address = '0.0.0.0'
+        protocol = 'https' if use_ssl else 'http'
         if verbose:
             print("Starting server\n")
-            print("To see the GUI go to: http://{}:{}".format(address, port))
+            print(f"To see the GUI go to: {protocol}://{address}:{port}")
         if call_on_start is not None:
             call_on_start(address, port)
 
