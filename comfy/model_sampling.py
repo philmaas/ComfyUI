@@ -22,10 +22,17 @@ class V_PREDICTION(EPS):
 class ModelSamplingDiscrete(torch.nn.Module):
     def __init__(self, model_config=None):
         super().__init__()
-        beta_schedule = "linear"
+
         if model_config is not None:
-            beta_schedule = model_config.sampling_settings.get("beta_schedule", beta_schedule)
-        self._register_schedule(given_betas=None, beta_schedule=beta_schedule, timesteps=1000, linear_start=0.00085, linear_end=0.012, cosine_s=8e-3)
+            sampling_settings = model_config.sampling_settings
+        else:
+            sampling_settings = {}
+
+        beta_schedule = sampling_settings.get("beta_schedule", "linear")
+        linear_start = sampling_settings.get("linear_start", 0.00085)
+        linear_end = sampling_settings.get("linear_end", 0.012)
+
+        self._register_schedule(given_betas=None, beta_schedule=beta_schedule, timesteps=1000, linear_start=linear_start, linear_end=linear_end, cosine_s=8e-3)
         self.sigma_data = 1.0
 
     def _register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
@@ -65,15 +72,15 @@ class ModelSamplingDiscrete(torch.nn.Module):
     def timestep(self, sigma):
         log_sigma = sigma.log()
         dists = log_sigma.to(self.log_sigmas.device) - self.log_sigmas[:, None]
-        return dists.abs().argmin(dim=0).view(sigma.shape)
+        return dists.abs().argmin(dim=0).view(sigma.shape).to(sigma.device)
 
     def sigma(self, timestep):
-        t = torch.clamp(timestep.float(), min=0, max=(len(self.sigmas) - 1))
+        t = torch.clamp(timestep.float().to(self.log_sigmas.device), min=0, max=(len(self.sigmas) - 1))
         low_idx = t.floor().long()
         high_idx = t.ceil().long()
         w = t.frac()
         log_sigma = (1 - w) * self.log_sigmas[low_idx] + w * self.log_sigmas[high_idx]
-        return log_sigma.exp()
+        return log_sigma.exp().to(timestep.device)
 
     def percent_to_sigma(self, percent):
         if percent <= 0.0:
