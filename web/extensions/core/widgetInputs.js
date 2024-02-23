@@ -22,6 +22,7 @@ function isConvertableWidget(widget, config) {
 }
 
 function hideWidget(node, widget, suffix = "") {
+	if (widget.type?.startsWith(CONVERTED_TYPE)) return;
 	widget.origType = widget.type;
 	widget.origComputeSize = widget.computeSize;
 	widget.origSerializeValue = widget.serializeValue;
@@ -180,7 +181,7 @@ export function mergeIfValid(output, config2, forceUpdate, recreateWidget, confi
 
 	const isNumber = config1[0] === "INT" || config1[0] === "FLOAT";
 	for (const k of keys.values()) {
-		if (k !== "default" && k !== "forceInput" && k !== "defaultInput") {
+		if (k !== "default" && k !== "forceInput" && k !== "defaultInput" && k !== "control_after_generate" && k !== "multiline") {
 			let v1 = config1[1][k];
 			let v2 = config2[1]?.[k];
 
@@ -260,6 +261,12 @@ app.registerExtension({
 	async beforeRegisterNodeDef(nodeType, nodeData, app) {
 		// Add menu options to conver to/from widgets
 		const origGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+		nodeType.prototype.convertWidgetToInput = function (widget) {
+			const config = getConfig.call(this, widget.name) ?? [widget.type, widget.options || {}];
+			if (!isConvertableWidget(widget, config)) return false;
+			convertToInput(this, widget, config);
+			return true;
+		};
 		nodeType.prototype.getExtraMenuOptions = function (_, options) {
 			const r = origGetExtraMenuOptions ? origGetExtraMenuOptions.apply(this, arguments) : undefined;
 
@@ -633,6 +640,14 @@ app.registerExtension({
 					}
 				}
 
+				// Restore any saved control values
+				const controlValues = this.controlValues;
+				if(this.lastType === this.widgets[0].type && controlValues?.length === this.widgets.length - 1) {
+					for(let i = 0; i < controlValues.length; i++) {
+						this.widgets[i + 1].value = controlValues[i];
+					}
+				}
+
 				// When our value changes, update other widgets to reflect our changes
 				// e.g. so LoadImage shows correct image
 				const callback = widget.callback;
@@ -721,6 +736,15 @@ app.registerExtension({
 							w.onRemove();
 						}
 					}
+
+					// Temporarily store the current values in case the node is being recreated
+					// e.g. by group node conversion
+					this.controlValues = [];
+					this.lastType = this.widgets[0]?.type;
+					for(let i = 1; i < this.widgets.length; i++) {
+						this.controlValues.push(this.widgets[i].value);
+					}
+					setTimeout(() => { delete this.lastType; delete this.controlValues }, 15);
 					this.widgets.length = 0;
 				}
 			}

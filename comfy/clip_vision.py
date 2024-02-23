@@ -1,7 +1,6 @@
-from .utils import load_torch_file, transformers_convert, common_upscale
+from .utils import load_torch_file, transformers_convert, state_dict_prefix_replace
 import os
 import torch
-import contextlib
 import json
 
 import comfy.ops
@@ -19,11 +18,13 @@ class Output:
 def clip_preprocess(image, size=224):
     mean = torch.tensor([ 0.48145466,0.4578275,0.40821073], device=image.device, dtype=image.dtype)
     std = torch.tensor([0.26862954,0.26130258,0.27577711], device=image.device, dtype=image.dtype)
-    scale = (size / min(image.shape[1], image.shape[2]))
-    image = torch.nn.functional.interpolate(image.movedim(-1, 1), size=(round(scale * image.shape[1]), round(scale * image.shape[2])), mode="bicubic", antialias=True)
-    h = (image.shape[2] - size)//2
-    w = (image.shape[3] - size)//2
-    image = image[:,:,h:h+size,w:w+size]
+    image = image.movedim(-1, 1)
+    if not (image.shape[2] == size and image.shape[3] == size):
+        scale = (size / min(image.shape[2], image.shape[3]))
+        image = torch.nn.functional.interpolate(image, size=(round(scale * image.shape[2]), round(scale * image.shape[3])), mode="bicubic", antialias=True)
+        h = (image.shape[2] - size)//2
+        w = (image.shape[3] - size)//2
+        image = image[:,:,h:h+size,w:w+size]
     image = torch.clip((255. * image), 0, 255).round() / 255.0
     return (image - mean.view([3,1,1])) / std.view([3,1,1])
 
@@ -34,27 +35,22 @@ class ClipVisionModel():
 
         self.load_device = comfy.model_management.text_encoder_device()
         offload_device = comfy.model_management.text_encoder_offload_device()
-        self.dtype = torch.float32
-        if comfy.model_management.should_use_fp16(self.load_device, prioritize_performance=False):
-            self.dtype = torch.float16
-
-        self.model = comfy.clip_model.CLIPVisionModelProjection(config, self.dtype, offload_device, comfy.ops)
+        self.dtype = comfy.model_management.text_encoder_dtype(self.load_device)
+        self.model = comfy.clip_model.CLIPVisionModelProjection(config, self.dtype, offload_device, comfy.ops.manual_cast)
+        self.model.eval()
 
         self.patcher = comfy.model_patcher.ModelPatcher(self.model, load_device=self.load_device, offload_device=offload_device)
+
     def load_sd(self, sd):
         return self.model.load_state_dict(sd, strict=False)
 
+    def get_sd(self):
+        return self.model.state_dict()
+
     def encode_image(self, image):
         comfy.model_management.load_model_gpu(self.patcher)
-        pixel_values = clip_preprocess(image.to(self.load_device))
-
-        if self.dtype != torch.float32:
-            precision_scope = torch.autocast
-        else:
-            precision_scope = lambda a, b: contextlib.nullcontext(a)
-
-        with precision_scope(comfy.model_management.get_autocast_device(self.load_device), torch.float32):
-            out = self.model(pixel_values=pixel_values, intermediate_output=-2)
+        pixel_values = clip_preprocess(image.to(self.load_device)).float()
+        out = self.model(pixel_values=pixel_values, intermediate_output=-2)
 
         outputs = Output()
         outputs["last_hidden_state"] = out[0].to(comfy.model_management.intermediate_device())
@@ -83,6 +79,9 @@ def convert_to_transformers(sd, prefix):
             sd['visual_projection.weight'] = sd.pop("{}proj".format(prefix)).transpose(0, 1)
 
         sd = transformers_convert(sd, prefix, "vision_model.", 48)
+    else:
+        replace_prefix = {prefix: ""}
+        sd = state_dict_prefix_replace(sd, replace_prefix)
     return sd
 
 def load_clipvision_from_sd(sd, prefix="", convert_keys=False):
